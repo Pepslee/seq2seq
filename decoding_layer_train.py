@@ -1,4 +1,5 @@
-def decoding_layer_train(encoder_state, dec_cell, dec_embed_input, 
+
+def decoding_layer_train(encoder_state, dec_cell, dec_embed_input,
                          target_sequence_length, max_summary_length, 
                          output_layer, keep_prob):
     """

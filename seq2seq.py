@@ -2,7 +2,7 @@ exercise = 4  # Possible values: 1, 2, 3, or 4.
 
 import requests
 
-from datasets import generate_x_y_data_v1, generate_x_y_data_v2, generate_x_y_data_v3
+# from datasets import generate_x_y_data_v1, generate_x_y_data_v2, generate_x_y_data_v3
 import tensorflow as tf  # Version 1.0 or 0.12
 import numpy as np
 import matplotlib.pyplot as plt
@@ -125,7 +125,7 @@ if exercise == 4:
 
 
 
-encoder_seq_length = 40  # Time series will have the same past and future (to be predicted) lenght.
+encoder_seq_length = 300  # Time series will have the same past and future (to be predicted) lenght.
 decoder_seq_length = 20  # Time series will have the same past and future (to be predicted) lenght.
 
 
@@ -146,7 +146,7 @@ hidden_dim = 20  # Count of hidden neurons in the recurrent units.
 layers_stacked_count = 2  # Number of stacked recurrent cells, on the neural depth axis. 
 
 # Optmizer: 
-learning_rate = 0.0001  # Small lr helps not to diverge during training.
+learning_rate = 0.0005  # Small lr helps not to diverge during training.
 nb_iters = 150  # How many times we perform a training step (therefore how many times we show a batch).
 lr_decay = 0.92  # default: 0.9 . Simulated annealing.
 momentum = 0.5  # default: 0.0 . Momentum technique in weights update
@@ -175,7 +175,7 @@ with tf.variable_scope('Seq2seq'):
         for t in range(decoder_seq_length)
     ]
 
-    dec_inp = [tf.zeros_like(enc_inp[0], dtype=np.float32, name="GO")] + enc_inp[:decoder_seq_length]
+    dec_inp = [tf.zeros_like(enc_inp[-decoder_seq_length], dtype=np.float32, name="GO")] + enc_inp[-decoder_seq_length+1:]
 
     cells = []
     for i in range(layers_stacked_count):
@@ -287,7 +287,7 @@ outputs = np.array(sess.run([reshaped_outputs], feed_dict)[0])
 for j in range(nb_predictions):
     plt.figure(figsize=(12, 3))
 
-    for k in range(output_dim):
+    for k in range(1):
         past = X[:, j, k]
         expected = Y[:, j, k]
         pred = outputs[:, j, k]
