@@ -1,4 +1,4 @@
-exercise = 4  # Possible values: 1, 2, 3, or 4.
+  # Possible values: 1, 2, 3, or 4.
 
 import requests
 
@@ -6,9 +6,70 @@ import requests
 import tensorflow as tf  # Version 1.0 or 0.12
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+import pandas as pd
+from random import shuffle
 
-# We choose which data function to use below, in function of the exericse. 
+# We choose which data function to use below, in function of the exericse.
 
+
+class Phase(object):
+    TEST = 0
+    TRAIN = 1
+
+
+class Pos(object):
+    pos = 0
+    def __init__(self, pos):
+        self.pos = pos
+
+    def increment(self):
+        self.pos += 1
+
+class Data(object):
+
+    win_x = 0
+    win_y = 0
+
+    num_class = 1
+    train_batch_position = Pos(0)
+    test_batch_position = Pos(0)
+
+    def __init__(self, path, win_x, win_y):
+        self.win_x = win_x
+        self.win_y = win_y
+        data_pd = pd.read_csv(path)
+        close_price = data_pd['close']  # get close prices in Pandas DataFrames array
+        close_price_diffs = close_price.pct_change()  # calculate price change in percents  p(i)/p(i-1) - 1
+        # plt.plot(close_price_diffs)
+        # plt.show()
+
+        self.data = close_price_diffs.as_matrix()[1:]  # to numpy, without first value, because it is NaN
+
+        self.train, self.test = train_test_split(self.data, test_size=0.3, shuffle=False)
+        self.ind_train = range(self.train.shape[0] - self.win_x - self.win_y)
+        self.ind_test = range(self.test.shape[0] - self.win_x - self.win_y)
+        shuffle(self.ind_train)
+        shuffle(self.ind_test)
+
+    def get_batch(self, data, indexes, pos,  size, win_x, win_y):
+        if pos.pos >= len(indexes) - size:
+            pos.pos = 0
+            shuffle(indexes)
+        batch_ind = indexes[pos.pos:pos.pos + size]
+        batch_x = list()
+        batch_y = list()
+        for i in batch_ind:
+            batch_x.append(data[i:i + win_x])
+            batch_y.append(data[i + win_x: i + win_x + win_y])
+            pos.pos += 1
+        ret_x = np.array(batch_x)
+        ret_y = np.array(batch_y)
+        # if win_y == 1:
+        # ret_y = np.expand_dims(ret_y, -1)
+        # ret_y = ret_y > 0
+        # ret_x = ret_x > 0
+        return ret_x, ret_y
 
 
 def loadCurrency(curr, window_size_x, window_size_y):
@@ -95,12 +156,13 @@ def generate_x_y_data_v4(isTrain, batch_size, l_x, l_y):
     decoder_seq_length = l_y
 
     X_usd, Y_usd = loadCurrency("USD", window_size_x=encoder_seq_length, window_size_y=decoder_seq_length)
-    X_eur, Y_eur = loadCurrency("EUR", window_size_x=encoder_seq_length, window_size_y=decoder_seq_length)
+    # X_eur, Y_eur = loadCurrency("EUR", window_size_x=encoder_seq_length, window_size_y=decoder_seq_length)
 
     # All data, aligned:
-    X = np.concatenate((X_usd, X_eur), axis=2)
-    Y = np.concatenate((Y_usd, Y_eur), axis=2)
-    X, Y = normalize(X, Y)
+    # X = np.concatenate((X_usd, X_eur), axis=2)
+    # Y = np.concatenate((Y_usd, Y_eur), axis=2)
+    # X, Y = normalize(X, Y)
+    X, Y = normalize(X_usd, Y_usd)
 
     # Split 80-20:
     X_train = X[:int(len(X) * 0.8)]
@@ -113,6 +175,25 @@ def generate_x_y_data_v4(isTrain, batch_size, l_x, l_y):
     else:
         return fetch_batch_size_random(X_test,  Y_test,  batch_size)
 
+
+
+def generate_x_y_data_v5(isTrain, batch_size, l_x, l_y):
+    path = '/home/panchenko/PycharmProjects/smart_trading/btc_all.csv'
+    data = Data(path, l_x, l_y)
+    if isTrain:
+        batch_xs, batch_ys = data.get_batch(data.train, data.ind_train, data.train_batch_position, batch_size, data.win_x,
+                                        data.win_y)
+    else:
+        batch_xs, batch_ys = data.get_batch(data.test, data.ind_test, data.test_batch_position,
+                                                  batch_size, data.win_x, data.win_y)
+    batch_xs = np.expand_dims(np.transpose(batch_xs), axis=2)
+    batch_ys = np.expand_dims(np.transpose(batch_ys), axis=2)
+    return batch_xs, batch_ys
+
+
+exercise = 5
+
+
 if exercise == 1:
     generate_x_y_data = generate_x_y_data_v1
 if exercise == 2:
@@ -121,17 +202,16 @@ if exercise == 3:
     generate_x_y_data = generate_x_y_data_v3
 if exercise == 4:
     generate_x_y_data = generate_x_y_data_v4
+if exercise == 5:
+    generate_x_y_data = generate_x_y_data_v5
+
+encoder_seq_length = 50  # Time series will have the same past and future (to be predicted) lenght.
+decoder_seq_length = 2  # Time series will have the same past and future (to be predicted) lenght.
 
 
+batch_size = 6  # Low value used for live demo purposes - 100 and 1000 would be possible too, crank that up!
 
-
-encoder_seq_length = 300  # Time series will have the same past and future (to be predicted) lenght.
-decoder_seq_length = 20  # Time series will have the same past and future (to be predicted) lenght.
-
-
-batch_size = 5  # Low value used for live demo purposes - 100 and 1000 would be possible too, crank that up!
-
-sample_x, sample_y = generate_x_y_data_v4(isTrain=True, batch_size=batch_size, l_x=encoder_seq_length, l_y=decoder_seq_length)
+sample_x, sample_y = generate_x_y_data(isTrain=True, batch_size=batch_size, l_x=encoder_seq_length, l_y=decoder_seq_length)
 print("Dimensions of the dataset for 3 X and 3 Y training examples : ")
 print(sample_x.shape)
 print(sample_y.shape)
@@ -143,11 +223,11 @@ print("(seq_length, batch_size, output_dim)")
 output_dim = sample_y.shape[-1]
 input_dim = sample_x.shape[-1]  # Output dimension (e.g.: multiple signals at once, tied in time)
 hidden_dim = 20  # Count of hidden neurons in the recurrent units.
-layers_stacked_count = 2  # Number of stacked recurrent cells, on the neural depth axis. 
+layers_stacked_count = 5  # Number of stacked recurrent cells, on the neural depth axis.
 
 # Optmizer: 
-learning_rate = 0.0005  # Small lr helps not to diverge during training.
-nb_iters = 150  # How many times we perform a training step (therefore how many times we show a batch).
+learning_rate = 0.05  # Small lr helps not to diverge during training.
+nb_iters = 500  # How many times we perform a training step (therefore how many times we show a batch).
 lr_decay = 0.92  # default: 0.9 . Simulated annealing.
 momentum = 0.5  # default: 0.0 . Momentum technique in weights update
 lambda_l2_reg = 0.003  # L2 regularization of weights - avoids overfitting
@@ -193,7 +273,7 @@ with tf.variable_scope('Seq2seq'):
 
     output_scale_factor = tf.Variable(1.0, name="Output_ScaleFactor")
 
-    reshaped_outputs = [output_scale_factor * (tf.matmul(i, w_out) + b_out) for i in dec_outputs]
+    reshaped_outputs = [ (tf.matmul(i, w_out) + b_out) for i in dec_outputs]
 
 
 # Training loss and optimizer
@@ -277,7 +357,7 @@ plt.show()
 
 
 # Test
-nb_predictions = 5
+nb_predictions = 10
 print("Let's visualize {} predictions with our signals:".format(nb_predictions))
 
 X, Y = generate_x_y_data(isTrain=False, batch_size=nb_predictions, l_x=encoder_seq_length, l_y=decoder_seq_length)
@@ -298,7 +378,7 @@ for j in range(nb_predictions):
         plt.plot(range(len(past)), past, "o--b", label=label1)
         plt.plot(range(len(past), len(expected) + len(past)), expected, "x--b", label=label2)
         plt.plot(range(len(past), len(pred) + len(past)), pred, "o--y", label=label3)
-
+        print(pred)
     plt.legend(loc='best')
     plt.title("Predictions v.s. true values")
     plt.show()
