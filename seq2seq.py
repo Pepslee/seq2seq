@@ -39,8 +39,8 @@ class Data(object):
         self.win_x = win_x
         self.win_y = win_y
         data_pd = pd.read_csv(path)
-        close_price = data_pd['close']  # get close prices in Pandas DataFrames array
-        close_price_diffs = close_price.pct_change()  # calculate price change in percents  p(i)/p(i-1) - 1
+        close_price = data_pd['diff']  # get close prices in Pandas DataFrames array
+        close_price_diffs = close_price#.pct_change()  # calculate price change in percents  p(i)/p(i-1) - 1
         # plt.plot(close_price_diffs)
         # plt.show()
 
@@ -49,13 +49,13 @@ class Data(object):
         self.train, self.test = train_test_split(self.data, test_size=0.3, shuffle=False)
         self.ind_train = range(self.train.shape[0] - self.win_x - self.win_y)
         self.ind_test = range(self.test.shape[0] - self.win_x - self.win_y)
-        shuffle(self.ind_train)
-        shuffle(self.ind_test)
+        # shuffle(self.ind_train)
+        # shuffle(self.ind_test)
 
     def get_batch(self, data, indexes, pos,  size, win_x, win_y):
         if pos.pos >= len(indexes) - size:
             pos.pos = 0
-            shuffle(indexes)
+            # shuffle(indexes)
         batch_ind = indexes[pos.pos:pos.pos + size]
         batch_x = list()
         batch_y = list()
@@ -65,6 +65,8 @@ class Data(object):
             pos.pos += 1
         ret_x = np.array(batch_x)
         ret_y = np.array(batch_y)
+        ret_x, ret_y = normalize(ret_x, ret_y)
+
         # if win_y == 1:
         # ret_y = np.expand_dims(ret_y, -1)
         # ret_y = ret_y > 0
@@ -178,7 +180,8 @@ def generate_x_y_data_v4(isTrain, batch_size, l_x, l_y):
 
 
 def generate_x_y_data_v5(isTrain, batch_size, l_x, l_y):
-    path = '/home/panchenko/PycharmProjects/smart_trading/btc_all.csv'
+    # path = '/home/panchenko/PycharmProjects/smart_trading/btc_all.csv'
+    path = '/home/panchenko/PycharmProjects/smart_trading/hullma_1h_90d.csv'
     data = Data(path, l_x, l_y)
     if isTrain:
         batch_xs, batch_ys = data.get_batch(data.train, data.ind_train, data.train_batch_position, batch_size, data.win_x,
@@ -205,8 +208,8 @@ if exercise == 4:
 if exercise == 5:
     generate_x_y_data = generate_x_y_data_v5
 
-encoder_seq_length = 50  # Time series will have the same past and future (to be predicted) lenght.
-decoder_seq_length = 2  # Time series will have the same past and future (to be predicted) lenght.
+encoder_seq_length = 100  # Time series will have the same past and future (to be predicted) lenght.
+decoder_seq_length = 5  # Time series will have the same past and future (to be predicted) lenght.
 
 
 batch_size = 6  # Low value used for live demo purposes - 100 and 1000 would be possible too, crank that up!
@@ -223,11 +226,11 @@ print("(seq_length, batch_size, output_dim)")
 output_dim = sample_y.shape[-1]
 input_dim = sample_x.shape[-1]  # Output dimension (e.g.: multiple signals at once, tied in time)
 hidden_dim = 20  # Count of hidden neurons in the recurrent units.
-layers_stacked_count = 5  # Number of stacked recurrent cells, on the neural depth axis.
+layers_stacked_count = 2  # Number of stacked recurrent cells, on the neural depth axis.
 
 # Optmizer: 
-learning_rate = 0.05  # Small lr helps not to diverge during training.
-nb_iters = 500  # How many times we perform a training step (therefore how many times we show a batch).
+learning_rate = 0.007  # Small lr helps not to diverge during training.
+nb_iters = 1000  # How many times we perform a training step (therefore how many times we show a batch).
 lr_decay = 0.92  # default: 0.9 . Simulated annealing.
 momentum = 0.5  # default: 0.0 . Momentum technique in weights update
 lambda_l2_reg = 0.003  # L2 regularization of weights - avoids overfitting
@@ -273,7 +276,7 @@ with tf.variable_scope('Seq2seq'):
 
     output_scale_factor = tf.Variable(1.0, name="Output_ScaleFactor")
 
-    reshaped_outputs = [ (tf.matmul(i, w_out) + b_out) for i in dec_outputs]
+    reshaped_outputs = [output_scale_factor*(tf.matmul(i, w_out) + b_out) for i in dec_outputs]
 
 
 # Training loss and optimizer
@@ -282,7 +285,8 @@ with tf.variable_scope('Loss'):
     # L2 loss
     output_loss = 0
     for _y, _Y in zip(reshaped_outputs, expected_sparse_output):
-        output_loss += tf.sqrt(tf.losses.mean_squared_error(_y, _Y))
+        # output_loss += tf.sqrt(tf.losses.mean_squared_error(_y, _Y))
+        output_loss += tf.reduce_mean(tf.nn.l2_loss(_y - _Y))
 
     # L2 regularization (to avoid overfitting and to have a  better generalization capacity)
     reg_loss = 0
@@ -357,7 +361,7 @@ plt.show()
 
 
 # Test
-nb_predictions = 10
+nb_predictions = 100
 print("Let's visualize {} predictions with our signals:".format(nb_predictions))
 
 X, Y = generate_x_y_data(isTrain=False, batch_size=nb_predictions, l_x=encoder_seq_length, l_y=decoder_seq_length)
