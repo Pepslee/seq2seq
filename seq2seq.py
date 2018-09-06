@@ -10,8 +10,6 @@ from sklearn.model_selection import train_test_split
 import pandas as pd
 from random import shuffle
 
-# We choose which data function to use below, in function of the exericse.
-
 
 class Phase(object):
     TEST = 0
@@ -20,11 +18,13 @@ class Phase(object):
 
 class Pos(object):
     pos = 0
+
     def __init__(self, pos):
         self.pos = pos
 
     def increment(self):
         self.pos += 1
+
 
 class Data(object):
 
@@ -74,42 +74,7 @@ class Data(object):
         return ret_x, ret_y
 
 
-def loadCurrency(curr, window_size_x, window_size_y):
-    """
-    Return the historical data for the USD or EUR bitcoin value. Is done with an web API call.
-    curr = "USD" | "EUR"
-    """
-    # For more info on the URL call, it is inspired by :
-    # https://github.com/Levino/coindesk-api-node
-    r = requests.get(
-        "http://api.coindesk.com/v1/bpi/historical/close.json?start=2010-07-17&end=2017-03-03&currency={}".format(
-            curr
-        )
-    )
-    data = r.json()
-    time_to_values = sorted(data["bpi"].items())
-    values = [val for key, val in time_to_values]
-    kept_values = values[1000:]
-
-    X = []
-    Y = []
-    for i in range(len(kept_values) - window_size_x - window_size_y):
-        X.append(kept_values[i:i + window_size_x])
-        Y.append(kept_values[i + window_size_x:i + window_size_x + window_size_y])
-
-    # To be able to concat on inner dimension later on:
-    X = np.expand_dims(X, axis=2)
-    Y = np.expand_dims(Y, axis=2)
-
-    return X, Y
-
 def normalize(X, Y=None):
-    """
-    Normalise X and Y according to the mean and standard deviation of the X values only.
-    """
-    # # It would be possible to normalize with last rather than mean, such as:
-    # lasts = np.expand_dims(X[:, -1, :], axis=1)
-    # assert (lasts[:, :] == X[:, -1, :]).all(), "{}, {}, {}. {}".format(lasts[:, :].shape, X[:, -1, :].shape, lasts[:, :], X[:, -1, :])
     mean = np.expand_dims(np.average(X, axis=1) + 0.00001, axis=1)
     stddev = np.expand_dims(np.std(X, axis=1) + 0.00001, axis=1)
     # print (mean.shape, stddev.shape)
@@ -124,64 +89,8 @@ def normalize(X, Y=None):
     return X
 
 
-def fetch_batch_size_random(X, Y, batch_size):
-    """
-    Returns randomly an aligned batch_size of X and Y among all examples.
-    The external dimension of X and Y must be the batch size (eg: 1 column = 1 example).
-    X and Y can be N-dimensional.
-    """
-    # assert X.shape == Y.shape, (X.shape, Y.shape)
-    idxes = np.random.randint(X.shape[0], size=batch_size)
-    X_out = np.array(X[idxes]).transpose((1, 0, 2))
-    Y_out = np.array(Y[idxes]).transpose((1, 0, 2))
-    return X_out, Y_out
-
-
-def generate_x_y_data_v4(isTrain, batch_size, l_x, l_y):
-    """
-    Return financial data for the bitcoin.
-
-    Features are USD and EUR, in the internal dimension.
-    We normalize X and Y data according to the X only to not
-    spoil the predictions we ask for.
-
-    For every window (window or encoder_seq_length), Y is the prediction following X.
-    Train and test data are separated according to the 80/20 rule.
-    Therefore, the 20 percent of the test data are the most
-    recent historical bitcoin values. Every example in X contains
-    40 points of USD and then EUR data in the feature axis/dimension.
-    It is to be noted that the returned X and Y has the same shape
-    and are in a tuple.
-    """
-    # 40 pas values for encoder, 40 after for decoder's predictions.
-    encoder_seq_length = l_x
-    decoder_seq_length = l_y
-
-    X_usd, Y_usd = loadCurrency("USD", window_size_x=encoder_seq_length, window_size_y=decoder_seq_length)
-    # X_eur, Y_eur = loadCurrency("EUR", window_size_x=encoder_seq_length, window_size_y=decoder_seq_length)
-
-    # All data, aligned:
-    # X = np.concatenate((X_usd, X_eur), axis=2)
-    # Y = np.concatenate((Y_usd, Y_eur), axis=2)
-    # X, Y = normalize(X, Y)
-    X, Y = normalize(X_usd, Y_usd)
-
-    # Split 80-20:
-    X_train = X[:int(len(X) * 0.8)]
-    Y_train = Y[:int(len(Y) * 0.8)]
-    X_test = X[int(len(X) * 0.8):]
-    Y_test = Y[int(len(Y) * 0.8):]
-
-    if isTrain:
-        return fetch_batch_size_random(X_train, Y_train, batch_size)
-    else:
-        return fetch_batch_size_random(X_test,  Y_test,  batch_size)
-
-
-
-def generate_x_y_data_v5(isTrain, batch_size, l_x, l_y):
-    # path = '/home/panchenko/PycharmProjects/smart_trading/btc_all.csv'
-    path = '/home/panchenko/PycharmProjects/smart_trading/hullma_1h_90d.csv'
+def generate_x_y_data(isTrain, batch_size, l_x, l_y):
+    path = '/home/serg/PycharmProjects/seq2seq/hullma_1h_90d.csv'
     data = Data(path, l_x, l_y)
     if isTrain:
         batch_xs, batch_ys = data.get_batch(data.train, data.ind_train, data.train_batch_position, batch_size, data.win_x,
@@ -194,30 +103,32 @@ def generate_x_y_data_v5(isTrain, batch_size, l_x, l_y):
     return batch_xs, batch_ys
 
 
-exercise = 5
+def train_batch(batch_size):
+    X, Y = generate_x_y_data(isTrain=True, batch_size=batch_size, l_x=encoder_seq_length, l_y=decoder_seq_length )
+    feed_dict = {enc_inp[t]: X[t] for t in range(len(enc_inp))}
+    feed_dict.update({expected_sparse_output[t]: Y[t] for t in range(len(expected_sparse_output))})
+    _, loss_t = sess.run([train_op, loss], feed_dict)
+    return loss_t
 
 
-if exercise == 1:
-    generate_x_y_data = generate_x_y_data_v1
-if exercise == 2:
-    generate_x_y_data = generate_x_y_data_v2
-if exercise == 3:
-    generate_x_y_data = generate_x_y_data_v3
-if exercise == 4:
-    generate_x_y_data = generate_x_y_data_v4
-if exercise == 5:
-    generate_x_y_data = generate_x_y_data_v5
-
-encoder_seq_length = 100  # Time series will have the same past and future (to be predicted) lenght.
-decoder_seq_length = 5  # Time series will have the same past and future (to be predicted) lenght.
+def test_batch(batch_size):
+    X, Y = generate_x_y_data(isTrain=False, batch_size=batch_size, l_x=encoder_seq_length, l_y=decoder_seq_length)
+    feed_dict = {enc_inp[t]: X[t] for t in range(len(enc_inp))}
+    feed_dict.update({expected_sparse_output[t]: Y[t] for t in range(len(expected_sparse_output))})
+    loss_t = sess.run([loss], feed_dict)
+    return loss_t[0]
 
 
-batch_size = 6  # Low value used for live demo purposes - 100 and 1000 would be possible too, crank that up!
+encoder_seq_length = 100
+decoder_seq_length = 5
+
+
+batch_size = 6
 
 sample_x, sample_y = generate_x_y_data(isTrain=True, batch_size=batch_size, l_x=encoder_seq_length, l_y=decoder_seq_length)
 print("Dimensions of the dataset for 3 X and 3 Y training examples : ")
-print(sample_x.shape)
-print(sample_y.shape)
+print(encoder_seq_length)
+print(decoder_seq_length)
 print("(seq_length, batch_size, output_dim)")
 
 # Internal neural network parameters
@@ -299,30 +210,6 @@ with tf.variable_scope('Loss'):
 with tf.variable_scope('Optimizer'):
     optimizer = tf.train.AdamOptimizer(learning_rate)
     train_op = optimizer.minimize(loss)
-
-
-def train_batch(batch_size):
-    """
-    Training step that optimizes the weights 
-    provided some batch_size X and Y examples from the dataset. 
-    """
-    X, Y = generate_x_y_data(isTrain=True, batch_size=batch_size, l_x=encoder_seq_length, l_y=decoder_seq_length )
-    feed_dict = {enc_inp[t]: X[t] for t in range(len(enc_inp))}
-    feed_dict.update({expected_sparse_output[t]: Y[t] for t in range(len(expected_sparse_output))})
-    _, loss_t = sess.run([train_op, loss], feed_dict)
-    return loss_t
-
-
-def test_batch(batch_size):
-    """
-    Test step, does NOT optimizes. Weights are frozen by not
-    doing sess.run on the train_op. 
-    """
-    X, Y = generate_x_y_data(isTrain=False, batch_size=batch_size, l_x=encoder_seq_length, l_y=decoder_seq_length)
-    feed_dict = {enc_inp[t]: X[t] for t in range(len(enc_inp))}
-    feed_dict.update({expected_sparse_output[t]: Y[t] for t in range(len(expected_sparse_output))})
-    loss_t = sess.run([loss], feed_dict)
-    return loss_t[0]
 
 
 # Training
