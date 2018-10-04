@@ -103,7 +103,7 @@ def main():
 
     # Optmizer:
     learning_rate = 0.005  # Small lr helps not to diverge during training.
-    nb_iters = 2000  # How many times we perform a training step (therefore how many times we show a batch).
+    nb_iters = 4000  # How many times we perform a training step (therefore how many times we show a batch).
     lambda_l2_reg = 0.003  # L2 regularization of weights - avoids overfitting
 
     # NN size
@@ -135,7 +135,7 @@ def main():
         # output_scale_factor = 1.0
         output = output_scale_factor*final_outputs.rnn_output
         ### Loss
-        output_loss = tf.reduce_mean(tf.nn.l2_loss(output - expected_sparse_output))
+        output_loss = tf.losses.mean_squared_error(output, expected_sparse_output)
 
         # Inference Decoder
         inference_helper = tf.contrib.seq2seq.ScheduledOutputTrainingHelper(decoder_input, decoder_lengths, sampling_probability=1.0)
@@ -151,8 +151,11 @@ def main():
         loss = output_loss + lambda_l2_reg * reg_loss
 
         with tf.variable_scope('Optimizer'):
-            optimizer = tf.train.AdamOptimizer(learning_rate)
-            train_op = optimizer.minimize(loss)
+            # optimizer = tf.train.AdamOptimizer(learning_rate)
+            # train_op = optimizer.minimize(loss)
+
+            global_step = tf.Variable(initial_value=0, name="global_step", trainable=False, collections=[tf.GraphKeys.GLOBAL_STEP, tf.GraphKeys.GLOBAL_VARIABLES])
+            train_op = tf.contrib.layers.optimize_loss(loss=loss, learning_rate=learning_rate, optimizer='Adam', global_step=global_step, clip_gradients=2.5)
 
         sess.run(tf.global_variables_initializer())
 
@@ -205,7 +208,7 @@ def main():
     nb_predictions = 50
     print("Let's visualize {} predictions with our signals:".format(nb_predictions))
 
-    encoder_seq_length += 50
+    # encoder_seq_length += 50
     X, Y = generate_x_y_data(isTrain=False, batch_size=1, l_x=encoder_seq_length, l_y=decoder_seq_length)
     inference_decoder_input_np = np.concatenate((X[:, -1:, :], Y[:, :-1, :]), axis=1)
     feed_dict = {encoder_input: X, decoder_input: inference_decoder_input_np, decoder_lengths: [decoder_seq_length]}
