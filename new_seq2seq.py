@@ -8,6 +8,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 import pandas as pd
+import os
+import imageio
 from random import shuffle
 
 
@@ -49,13 +51,14 @@ class Data(object):
         self.train, self.test = train_test_split(self.data, test_size=0.3, shuffle=False)
         self.ind_train = range(self.train.shape[0] - self.win_x - self.win_y)
         self.ind_test = range(self.test.shape[0] - self.win_x - self.win_y)
-        # shuffle(self.ind_train)
+        shuffle(self.ind_train)
         # shuffle(self.ind_test)
 
-    def get_batch(self, data, indexes, pos,  size, win_x, win_y):
+    def get_batch(self, data, indexes, pos,  size, win_x, win_y, shuffle=False):
         if pos.pos >= len(indexes) - size:
             pos.pos = 0
-            # shuffle(indexes)
+            if shuffle:
+                shuffle(indexes)
         batch_ind = indexes[pos.pos:pos.pos + size]
         batch_x = list()
         batch_y = list()
@@ -86,7 +89,7 @@ def generate_x_y_data(isTrain, batch_size, l_x, l_y):
     data = Data(path, l_x, l_y)
     if isTrain:
         batch_xs, batch_ys = data.get_batch(data.train, data.ind_train, data.train_batch_position, batch_size, data.win_x,
-                                        data.win_y)
+                                        data.win_y, shuffle=True)
     else:
         batch_xs, batch_ys = data.get_batch(data.test, data.ind_test, data.test_batch_position,
                                                   batch_size, data.win_x, data.win_y)
@@ -103,12 +106,18 @@ def main():
 
     # Optmizer:
     learning_rate = 0.005  # Small lr helps not to diverge during training.
-    nb_iters = 4000  # How many times we perform a training step (therefore how many times we show a batch).
+    nb_iters = 50000  # How many times we perform a training step (therefore how many times we show a batch).
     lambda_l2_reg = 0.003  # L2 regularization of weights - avoids overfitting
 
     # NN size
-    encoder_seq_length = 50
-    decoder_seq_length = 5
+    encoder_seq_length = 100
+    decoder_seq_length = 50
+
+    dirname = 'iter_' + str(nb_iters) + '_enc_' + str(encoder_seq_length) + '_dec_' + str(decoder_seq_length)
+
+    if not os.path.exists(dirname):
+        os.makedirs(dirname)
+
 
     tf.reset_default_graph()
     sess = tf.InteractiveSession()
@@ -201,19 +210,15 @@ def main():
     plt.xlabel('Iteration')
     plt.ylabel('log(Loss)')
     plt.legend(loc='best')
-    plt.show()
+    plt.savefig(os.path.join(dirname, 'loss'))
+    # plt.show()
 
 
     # Test
     nb_predictions = 50
     print("Let's visualize {} predictions with our signals:".format(nb_predictions))
 
-    # encoder_seq_length += 50
-    X, Y = generate_x_y_data(isTrain=False, batch_size=1, l_x=encoder_seq_length, l_y=decoder_seq_length)
-    inference_decoder_input_np = np.concatenate((X[:, -1:, :], Y[:, :-1, :]), axis=1)
-    feed_dict = {encoder_input: X, decoder_input: inference_decoder_input_np, decoder_lengths: [decoder_seq_length]}
-    outputs = sess.run(inference_logits, feed_dict)
-
+    images = []
     for j in range(nb_predictions):
 
         X, Y = generate_x_y_data(isTrain=False, batch_size=1, l_x=encoder_seq_length, l_y=decoder_seq_length)
@@ -221,12 +226,10 @@ def main():
         feed_dict = {encoder_input: X, decoder_input: inference_decoder_input_np, decoder_lengths: [decoder_seq_length]}
         outputs = sess.run(inference_logits, feed_dict)
 
-
-
         plt.figure(figsize=(12, 3))
 
         for k in range(1):
-            past = X[0, :, 0]
+            past = X[0, -50:, 0]
             expected = Y[0, :, 0]
             pred = outputs[0, :, 0]
 
@@ -238,8 +241,14 @@ def main():
             plt.plot(range(len(past), len(pred) + len(past)), pred, "o--y", label=label3)
             print(pred)
         plt.legend(loc='best')
-        plt.title("Predictions v.s. true values")
-        plt.show()
+        plt.title('iter_' + str(nb_iters) + '_enc_' + str(encoder_seq_length) + '_dec_' + str(decoder_seq_length))
+
+        img_name = os.path.join(dirname, str(j) + '.png')
+        plt.savefig(img_name)
+        img = imageio.imread(img_name)
+        images.append(img)
+        # plt.show()
+    imageio.mimsave(os.path.join(dirname, 'ani.gif', ), images, duration = 0.5)
 
 
 if __name__ == '__main__':
