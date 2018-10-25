@@ -111,7 +111,7 @@ def main():
 
     # NN size
     encoder_seq_length = 100
-    decoder_seq_length = 50
+    decoder_seq_length = 3
 
     dirname = 'iter_' + str(nb_iters) + '_enc_' + str(encoder_seq_length) + '_dec_' + str(decoder_seq_length)
 
@@ -241,7 +241,7 @@ def main():
             plt.plot(range(len(past), len(pred) + len(past)), pred, "o--y", label=label3)
             print(pred)
         plt.legend(loc='best')
-        plt.title('iter_' + str(nb_iters) + '_enc_' + str(encoder_seq_length) + '_dec_' + str(decoder_seq_length))
+        plt.title(dirname)
 
         img_name = os.path.join(dirname, str(j) + '.png')
         plt.savefig(img_name)
